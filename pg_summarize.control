@@ -1,0 +1,5 @@
+comment = 'pg_summarize:  Text Summarization using LLMs. Built using pgrx'
+default_version = '@CARGO_VERSION@'
+module_pathname = '$libdir/pg_summarize'
+relocatable = false
+superuser = true
