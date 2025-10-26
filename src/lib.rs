@@ -3,7 +3,10 @@ use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde_json::json;
 
-pgrx::pg_module_magic!();
+// Re-export pgrx for the binary
+pub use pgrx;
+
+pg_module_magic!();
 
 #[pg_extern]
 fn hello_pg_summarize() -> &'static str {
@@ -12,29 +15,48 @@ fn hello_pg_summarize() -> &'static str {
 
 #[pg_extern]
 fn summarize(input: &str) -> String {
-    let api_key = Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.api_key', true)")
-        .expect("failed to get 'pg_summarizer.api_key' setting")
-        .expect("got null for 'pg_summarizer.api_key' setting");
+    let api_key = Spi::connect(|client| {
+        client
+            .select("SELECT current_setting('pg_summarizer.api_key', true)", None, &[])?
+            .first()
+            .get::<String>(1)
+            .ok()
+            .flatten()
+            .ok_or(pgrx::spi::Error::InvalidPosition)
+    })
+    .expect("failed to get 'pg_summarizer.api_key' setting");
 
-    let model = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.model', true)") {
-        Ok(Some(model_name)) => model_name,
-        _ => "gpt-3.5-turbo",
-    };
+    let model = Spi::connect(|client| -> Result<String, pgrx::spi::Error> {
+        Ok(client
+            .select("SELECT current_setting('pg_summarizer.model', true)", None, &[])?
+            .first()
+            .get::<String>(1)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "gpt-3.5-turbo".to_string()))
+    })
+    .expect("failed to get 'pg_summarizer.model' setting");
 
-    let prompt = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.prompt', true)")
-    {
-        Ok(Some(prompt_str)) => prompt_str,
-        _ => {
-            "You are an AI summarizing tool. \
-        Your purpose is to summarize the <text> tag, \
-        not to engage in conversation or discussion. \
-        Please read the <text> carefully. \
-        Then, summarize the key points. \
-        Focus on capturing the most important information as concisely as possible."
-        }
-    };
+    let prompt = Spi::connect(|client| -> Result<String, pgrx::spi::Error> {
+        Ok(client
+            .select("SELECT current_setting('pg_summarizer.prompt', true)", None, &[])?
+            .first()
+            .get::<String>(1)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| {
+                "You are an AI summarizing tool. \
+                Your purpose is to summarize the <text> tag, \
+                not to engage in conversation or discussion. \
+                Please read the <text> carefully. \
+                Then, summarize the key points. \
+                Focus on capturing the most important information as concisely as possible."
+                    .to_string()
+            }))
+    })
+    .expect("failed to get 'pg_summarizer.prompt' setting");
 
-    match make_api_call(input, &api_key, model, prompt) {
+    match make_api_call(input, &api_key, &model, &prompt) {
         Ok(summary) => summary,
         Err(e) => panic!("Error: {}", e),
     }
@@ -110,3 +132,4 @@ pub mod pg_test {
         vec![]
     }
 }
+
