@@ -14,10 +14,10 @@ Rust is a systems programming language known for its performance and safety. Whe
 
 First, ensure you have Rust installed on your system. If not, install it using [rustup.rs](https://rustup.rs).
 
-Next, add the `pgrx` crate to your project:
+Install the matching `cargo-pgrx` CLI with Rust 1.99.1 or later.
 
 ```sh
-cargo install --locked cargo-pgrx
+cargo install --locked cargo-pgrx --version 0.20.1
 ```
 
 Initialize the "PGRX Home" directory:
@@ -164,28 +164,29 @@ Now, let’s wrap the core function `make_api_call` with a function `summarize` 
 ```rust
 #[pg_extern]
 fn summarize(input: &str) -> String {
-    let api_key = Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.api_key', true)")
+    let api_key = Spi::get_one::<String>("SELECT current_setting('pg_summarizer.api_key', true)")
         .expect("failed to get 'pg_summarizer.api_key' setting")
         .expect("got null for 'pg_summarizer.api_key' setting");
 
-    let model = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.model', true)") {
+    let model = match Spi::get_one::<String>("SELECT current_setting('pg_summarizer.model', true)")
+    {
         Ok(Some(model_name)) => model_name,
-        _ => "gpt-3.5-turbo",
+        _ => "gpt-3.5-turbo".to_owned(),
     };
 
-    let prompt = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.prompt', true)") {
-        Ok(Some(prompt_str)) => prompt_str,
-        _ => {
-            "You are an AI summarizing tool. \
-            Your purpose is to summarize the <text> tag, \
-            not to engage in conversation or discussion. \
-            Please read the <text> carefully. \
-            Then, summarize the key points. \
-            Focus on capturing the most important information as concisely as possible."
-        }
-    };
+    let prompt =
+        match Spi::get_one::<String>("SELECT current_setting('pg_summarizer.prompt', true)") {
+            Ok(Some(prompt_str)) => prompt_str,
+            _ => "You are an AI summarizing tool. \
+        Your purpose is to summarize the <text> tag, \
+        not to engage in conversation or discussion. \
+        Please read the <text> carefully. \
+        Then, summarize the key points. \
+        Focus on capturing the most important information as concisely as possible."
+                .to_owned(),
+        };
 
-    match make_api_call(input, &api_key, model, prompt) {
+    match make_api_call(input, &api_key, &model, &prompt) {
         Ok(summary) => summary,
         Err(e) => panic!("Error: {}", e),
     }
