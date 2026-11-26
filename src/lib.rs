@@ -12,29 +12,29 @@ fn hello_pg_summarize() -> &'static str {
 
 #[pg_extern]
 fn summarize(input: &str) -> String {
-    let api_key = Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.api_key', true)")
+    let api_key = Spi::get_one::<String>("SELECT current_setting('pg_summarizer.api_key', true)")
         .expect("failed to get 'pg_summarizer.api_key' setting")
         .expect("got null for 'pg_summarizer.api_key' setting");
 
-    let model = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.model', true)") {
+    let model = match Spi::get_one::<String>("SELECT current_setting('pg_summarizer.model', true)")
+    {
         Ok(Some(model_name)) => model_name,
-        _ => "gpt-3.5-turbo",
+        _ => "gpt-3.5-turbo".to_owned(),
     };
 
-    let prompt = match Spi::get_one::<&str>("SELECT current_setting('pg_summarizer.prompt', true)")
-    {
-        Ok(Some(prompt_str)) => prompt_str,
-        _ => {
-            "You are an AI summarizing tool. \
+    let prompt =
+        match Spi::get_one::<String>("SELECT current_setting('pg_summarizer.prompt', true)") {
+            Ok(Some(prompt_str)) => prompt_str,
+            _ => "You are an AI summarizing tool. \
         Your purpose is to summarize the <text> tag, \
         not to engage in conversation or discussion. \
         Please read the <text> carefully. \
         Then, summarize the key points. \
         Focus on capturing the most important information as concisely as possible."
-        }
-    };
+                .to_owned(),
+        };
 
-    match make_api_call(input, &api_key, model, prompt) {
+    match make_api_call(input, &api_key, &model, &prompt) {
         Ok(summary) => summary,
         Err(e) => panic!("Error: {}", e),
     }
